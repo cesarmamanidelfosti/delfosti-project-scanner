@@ -10,8 +10,23 @@ export const ANTHROPIC_BASE_URL_ENV_KEY = "ANTHROPIC_BASE_URL";
 export const OPENROUTER_API_KEY_ENV_KEY = "OPENROUTER_API_KEY";
 export const OPENWIKI_PROVIDER_ENV_KEY = "OPENWIKI_PROVIDER";
 export const OPENWIKI_MODEL_ID_ENV_KEY = "OPENWIKI_MODEL_ID";
+export const OPENWIKI_MODEL_FALLBACKS_ENV_KEY = "OPENWIKI_MODEL_FALLBACKS";
 export const DEFAULT_PROVIDER = "openrouter";
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+
+/**
+ * Built-in fallback chain used when the openrouter provider is selected and
+ * {@link OPENWIKI_MODEL_FALLBACKS_ENV_KEY} is not set. OpenRouter's `models`
+ * request field automatically retries with the next entry, within the same
+ * request, when the primary model errors (rate limits, downtime, etc.) — see
+ * https://openrouter.ai/docs/guides/routing/model-fallbacks. Claude Sonnet is
+ * a stable, well-supported tool-calling model, which makes it a safe default
+ * fallback behind reasoning models (like GLM) that are more prone to
+ * provider-side 5xx errors on long, tool-heavy conversations.
+ */
+export const DEFAULT_OPENROUTER_MODEL_FALLBACKS: readonly string[] = [
+  "anthropic/claude-sonnet-5",
+];
 
 export type OpenWikiProvider =
   | "anthropic"
@@ -231,6 +246,58 @@ export function isValidModelId(value: string): boolean {
     /^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/u.test(modelId) &&
     !modelId.includes("://")
   );
+}
+
+/**
+ * Parses a comma-separated {@link OPENWIKI_MODEL_FALLBACKS_ENV_KEY} value into
+ * an ordered, de-duplicated list of valid model IDs. Invalid or blank entries
+ * are silently dropped rather than rejecting the whole list.
+ */
+export function parseModelFallbackIds(
+  value: string | null | undefined,
+): string[] {
+  if (!value) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const fallbackIds: string[] = [];
+
+  for (const rawId of value.split(",")) {
+    const modelId = normalizeModelId(rawId);
+
+    if (modelId.length === 0 || !isValidModelId(modelId) || seen.has(modelId)) {
+      continue;
+    }
+
+    seen.add(modelId);
+    fallbackIds.push(modelId);
+  }
+
+  return fallbackIds;
+}
+
+/**
+ * Resolves the fallback model IDs to pass alongside the primary model. An
+ * explicit {@link OPENWIKI_MODEL_FALLBACKS_ENV_KEY} always wins; otherwise
+ * openrouter gets {@link DEFAULT_OPENROUTER_MODEL_FALLBACKS} for resilience
+ * against provider-side 5xx errors. Other providers have no built-in default,
+ * since they only support a single fallback API shape (or none).
+ */
+export function resolveModelFallbackIds(
+  provider: OpenWikiProvider,
+  modelId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const configured = parseModelFallbackIds(env[OPENWIKI_MODEL_FALLBACKS_ENV_KEY]);
+  const fallbackIds =
+    configured.length > 0
+      ? configured
+      : provider === "openrouter"
+        ? [...DEFAULT_OPENROUTER_MODEL_FALLBACKS]
+        : [];
+
+  return fallbackIds.filter((fallbackId) => fallbackId !== modelId);
 }
 
 export const OPENWIKI_VERSION = "0.0.2";

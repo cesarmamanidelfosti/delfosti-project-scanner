@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   DEFAULT_MODEL_ID,
+  DEFAULT_OPENROUTER_MODEL_FALLBACKS,
   DEFAULT_PROVIDER,
   getDefaultModelId,
   isValidBaseUrl,
@@ -8,7 +9,9 @@ import {
   isValidProvider,
   normalizeModelId,
   normalizeProvider,
+  parseModelFallbackIds,
   resolveConfiguredProvider,
+  resolveModelFallbackIds,
   resolveProviderBaseUrl,
 } from "../src/constants.ts";
 
@@ -122,6 +125,58 @@ describe("isValidBaseUrl", () => {
     expect(isValidBaseUrl("   ")).toBe(false);
     expect(isValidBaseUrl("not a url")).toBe(false);
     expect(isValidBaseUrl("ftp://example.com")).toBe(false);
+  });
+});
+
+describe("parseModelFallbackIds", () => {
+  test("splits, trims, and validates a comma-separated list", () => {
+    expect(
+      parseModelFallbackIds("anthropic/claude-sonnet-5, openai/gpt-5.5"),
+    ).toEqual(["anthropic/claude-sonnet-5", "openai/gpt-5.5"]);
+  });
+
+  test("drops blank and invalid entries without rejecting the whole list", () => {
+    expect(parseModelFallbackIds("anthropic/claude-sonnet-5,, http://evil")).toEqual(
+      ["anthropic/claude-sonnet-5"],
+    );
+  });
+
+  test("de-duplicates repeated ids", () => {
+    expect(parseModelFallbackIds("gpt-5.5,gpt-5.5")).toEqual(["gpt-5.5"]);
+  });
+
+  test("returns an empty list for null, undefined, or empty input", () => {
+    expect(parseModelFallbackIds(null)).toEqual([]);
+    expect(parseModelFallbackIds(undefined)).toEqual([]);
+    expect(parseModelFallbackIds("")).toEqual([]);
+  });
+});
+
+describe("resolveModelFallbackIds", () => {
+  test("defaults openrouter to the built-in fallback chain", () => {
+    expect(resolveModelFallbackIds("openrouter", "z-ai/glm-5.2", {})).toEqual([
+      ...DEFAULT_OPENROUTER_MODEL_FALLBACKS,
+    ]);
+  });
+
+  test("excludes the primary model id if it is also the default fallback", () => {
+    expect(
+      resolveModelFallbackIds("openrouter", "anthropic/claude-sonnet-5", {}),
+    ).toEqual([]);
+  });
+
+  test("an explicit env override wins over the built-in default", () => {
+    expect(
+      resolveModelFallbackIds("openrouter", "z-ai/glm-5.2", {
+        OPENWIKI_MODEL_FALLBACKS: "openai/gpt-5.5",
+      }),
+    ).toEqual(["openai/gpt-5.5"]);
+  });
+
+  test("non-openrouter providers have no built-in default", () => {
+    expect(resolveModelFallbackIds("anthropic", "claude-sonnet-5", {})).toEqual(
+      [],
+    );
   });
 });
 

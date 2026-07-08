@@ -31,6 +31,7 @@ import {
   OPENWIKI_PROVIDER_ENV_KEY,
   providerRequiresBaseUrl,
   resolveConfiguredProvider,
+  resolveModelFallbackIds,
   resolveProviderBaseUrl,
   type OpenWikiProvider,
 } from "../constants.js";
@@ -333,10 +334,15 @@ function createModel(provider: OpenWikiProvider, modelId: string) {
   }
 
   if (provider === "openrouter") {
+    const fallbackModelIds = resolveModelFallbackIds(provider, modelId);
+
     return new ChatOpenRouter({
       apiKey: process.env[OPENROUTER_API_KEY_ENV_KEY],
       baseURL: OPENROUTER_BASE_URL,
       model: modelId,
+      ...(fallbackModelIds.length > 0
+        ? { models: [modelId, ...fallbackModelIds] }
+        : {}),
       siteName: "OpenWiki",
     });
   }
@@ -855,6 +861,7 @@ type OpenRouterRequestSummary = {
   messageCount?: number;
   method: string;
   model?: string;
+  modelFallbacks?: string[];
   stream?: boolean;
   toolCount?: number;
   toolNames?: string[];
@@ -975,6 +982,7 @@ function summarizeOpenRouterRequest(
       : undefined,
     method: init?.method ?? "GET",
     model: typeof parsedBody?.model === "string" ? parsedBody.model : undefined,
+    modelFallbacks: getOpenRouterModelFallbacks(parsedBody?.models),
     stream:
       typeof parsedBody?.stream === "boolean" ? parsedBody.stream : undefined,
     toolCount: toolNames.length,
@@ -1011,6 +1019,18 @@ function getOpenRouterToolNames(tools: unknown): string[] {
       return typeof tool.function.name === "string" ? tool.function.name : null;
     })
     .filter((name): name is string => name !== null);
+}
+
+function getOpenRouterModelFallbacks(models: unknown): string[] | undefined {
+  if (!Array.isArray(models)) {
+    return undefined;
+  }
+
+  const modelIds = models.filter(
+    (model): model is string => typeof model === "string",
+  );
+
+  return modelIds.length > 0 ? modelIds : undefined;
 }
 
 function getOpenRouterMessageChars(messages: unknown): number | undefined {
