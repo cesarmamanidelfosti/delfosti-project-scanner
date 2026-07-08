@@ -1,128 +1,87 @@
-# CLI usage
+# Uso de la CLI
 
-OpenWiki ships as a single `openwiki` binary and is intended to work both as an interactive terminal app and as a one-shot documentation runner.
+OpenWiki se distribuye como un único binario `openwiki` y está diseñado para funcionar tanto como una aplicación de terminal interactiva como como un ejecutor de documentación de un solo disparo.
 
-## Commands and modes
+## Comandos y modos
 
-From `src/commands.ts` and `README.md`, the supported entry patterns are:
+Según `src/commands.ts` y `README.md`, los patrones de entrada admitidos son:
 
-- `openwiki` — open the interactive chat UI.
-- `openwiki "message"` — send a chat message immediately, then stay open.
-- `openwiki --init [message]` — generate initial OpenWiki documentation.
-- `openwiki --update [message]` — refresh existing OpenWiki documentation.
-- `openwiki -p, --print` — run once and print the final assistant output (non-interactive).
-- `openwiki --modelId <id>` / `--model-id <id>` — choose a model ID for the run.
-- `openwiki --help` / `-h` — print usage, options, and examples.
-- `openwiki --dry-run` — development-only option that avoids invoking the agent.
+- `openwiki` — abre la interfaz de chat interactiva.
+- `openwiki "mensaje"` — envía un mensaje de chat inmediatamente y luego permanece abierto.
+- `openwiki --init [mensaje]` — genera la documentación inicial de OpenWiki.
+- `openwiki --update [mensaje]` — renueva la documentación existente de OpenWiki.
+- `openwiki -p, --print` — ejecuta una vez e imprime la salida final del asistente (no interactivo).
+- `openwiki --modelId <id>` / `--model-id <id>` — elige un ID de modelo para la ejecución.
+- `openwiki --help` / `-h` — imprime el uso, las opciones y los ejemplos.
+- `openwiki --dry-run` — opción solo de desarrollo que evita invocar al agente.
 
-The parser rejects incompatible combinations such as `--init` and `--update` together, and it requires a message or command when `--print` is used.
+El analizador rechaza combinaciones incompatibles como `--init` y `--update` juntos, y requiere un mensaje o un comando cuando se usa `--print`.
 
-### Auto-exit for init/update
+### Auto-salida para init/update
 
-When `--init` or `--update` is run in a TTY (without `--print`), the CLI starts the run, streams agent output, and **exits automatically on success** (`shouldAutoExitStartupRun` in `src/cli.tsx`). This means `openwiki --init` behaves like a one-shot command while still showing a live UI. Chat runs and `--print` runs are not affected — chat stays open for follow-ups, and `--print` writes to stdout and exits.
+Cuando `--init` o `--update` se ejecutan en una TTY (sin `--print`), la CLI inicia la ejecución, transmite la salida del agente y **se cierra automáticamente al successar** (`shouldAutoExitStartupRun` en `src/cli.tsx`). Esto significa que `openwiki --init` se comporta como un comando de un solo disparo mientras sigue mostrando una interfaz en vivo. Las ejecuciones de chat y las de `--print` no se ven afectadas — el chat permanece abierto para mensajes de seguimiento, y `--print` escribe a stdout y termina.
 
-### Non-interactive mode
+### Modo no interactivo
 
-If stdin is not a TTY (e.g. CI), or `--print` is used, the CLI requires a provider API key to be already saved in `~/.openwiki/.env` or present in the environment. It will error with a clear message if the key is missing, rather than prompting interactively.
+Si stdin no es una TTY (por ejemplo, CI), o se usa `--print`, la CLI requiere que una clave de API del proveedor ya esté guardada en `~/.openwiki/.env` o presente en el entorno. Mostrará un error con un mensaje claro si la clave falta, en lugar de pedirlo interactivamente.
 
-## Interactive behavior
+## Comportamiento interactivo
 
-`src/cli.tsx` is the Ink-based app shell. It handles:
+`src/cli.tsx` es la cáscara de la aplicación basada en Ink. Maneja:
 
-- chat submission and follow-up messages,
-- `init` / `update` command launches (including from `/init` and `/update` slash commands),
-- provider and model selection during the session (`/provider`, `/model`),
-- interactive credential setup when required (including for init/update, not just chat),
-- streaming agent text and tool events,
-- completed-run history and error display,
-- exit handling for help, errors, and explicit `/exit` messages.
+- el envío de chat y mensajes de seguimiento,
+- los lanzamientos de comandos `init` / `update` (incluyendo desde los comandos slash `/init` y `/update`),
+- la selección de proveedor y modelo durante la sesión (`/provider`, `/model`),
+- la configuración interactiva de credenciales cuando es necesaria (incluyendo para init/update, no solo chat),
+- la transmisión de texto del agente y eventos de herramientas,
+- el historial de ejecuciones completadas y la visualización de errores,
+- el manejo de salida para ayuda, errores y mensajes explícitos de `/exit`.
 
-The UI persists provider and model selection back to `~/.openwiki/.env` through `saveOpenWikiEnv()`.
+La interfaz persiste la selección de proveedor y modelo de vuelta a `~/.openwiki/.env` a través de `saveOpenWikiEnv()`.
 
-## Credentials and onboarding
+## Credenciales y configuración inicial
 
-The first interactive run can prompt for:
+La primera ejecución interactiva puede solicitar:
 
-- a **provider** (`OPENWIKI_PROVIDER`) — openrouter, baseten, fireworks, openai, openai-compatible, or anthropic,
-- the **provider API key** (e.g. `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`, `ANTHROPIC_API_KEY`, `BASETEN_API_KEY`, `FIREWORKS_API_KEY`),
-- a **base URL** for providers that require one (the openai-compatible provider prompts for `OPENAI_COMPATIBLE_BASE_URL`),
-- a **model ID** stored as `OPENWIKI_MODEL_ID` — chosen from the provider's model list or a custom ID,
-- optional `LANGSMITH_API_KEY` for tracing.
+- un **proveedor** (`OPENWIKI_PROVIDER`) — openrouter, baseten, fireworks, openai, openai-compatible o anthropic,
+- la **clave de API del proveedor** (por ejemplo `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`, `ANTHROPIC_API_KEY`, `BASETEN_API_KEY`, `FIREWORKS_API_KEY`),
+- una **URL base** para los proveedores que la requieren (el proveedor openai-compatible pide `OPENAI_COMPATIBLE_BASE_URL`),
+- un **ID de modelo** almacenado como `OPENWIKI_MODEL_ID` — elegido de la lista de modelos del proveedor o un ID personalizado,
+- opcionalmente `LANGSMITH_API_KEY` para trazado.
 
-If a LangSmith key is provided, onboarding also enables `LANGCHAIN_PROJECT=openwiki` and `LANGCHAIN_TRACING_V2=true`.
+Si se proporciona una clave de LangSmith, la configuración inicial también habilita `LANGCHAIN_PROJECT=openwiki` y `LANGCHAIN_TRACING_V2=true`.
 
-`src/credentials.tsx` determines whether setup is needed and walks the user through the missing values using arrow-key selection menus for provider and model. See [Credentials and updates](../operations/credentials-and-updates.md) for details.
+`src/credentials.tsx` determina si se necesita configuración y guía al usuario a través de los valores faltantes usando menús de selección con teclas de flecha para proveedor y modelo. Consulte [Credenciales y actualizaciones](../operations/credentials-and-updates.md) para más detalles.
 
-## Provider and model selection
+## Selección de proveedor y modelo
 
-Providers and their model options are defined in `PROVIDER_CONFIGS` in `src/constants.ts`:
+Los proveedores y sus opciones de modelo se definen en `PROVIDER_CONFIGS` en `src/constants.ts`:
 
-| Provider          | Env key                     | Base URL                                | Models                                                                |
-| ----------------- | --------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
-| openrouter        | `OPENROUTER_API_KEY`        | `https://openrouter.ai/api/v1`          | GLM 5.2, Fusion, Kimi K2.7 Code, Claude Opus/Sonnet, GPT 5.4 mini/5.5 |
-| baseten           | `BASETEN_API_KEY`           | `https://inference.baseten.co/v1`       | GLM 5.2, Kimi K2.7 Code                                               |
-| fireworks         | `FIREWORKS_API_KEY`         | `https://api.fireworks.ai/inference/v1` | GLM 5.2, Kimi K2.7 Code                                               |
-| openai            | `OPENAI_API_KEY`            | (default)                               | GPT 5.4 mini, GPT 5.5                                                 |
-| openai-compatible | `OPENAI_COMPATIBLE_API_KEY` | `OPENAI_COMPATIBLE_BASE_URL` (required) | custom model ID only                                                  |
-| anthropic         | `ANTHROPIC_API_KEY`         | (default, or `ANTHROPIC_BASE_URL`)      | Haiku, Sonnet, Opus                                                   |
+| Proveedor          | Clave de entorno            | URL base                                | Modelos                                                                |
+| ------------------ | --------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
+| openrouter         | `OPENROUTER_API_KEY`        | `https://openrouter.ai/api/v1`          | GLM 5.2, Fusion, Kimi K2.7 Code, Claude Opus/Sonnet, GPT 5.4 mini/5.5 |
+| baseten            | `BASETEN_API_KEY`           | `https://inference.baseten.co/v1`       | GLM 5.2, Kimi K2.7 Code                                               |
+| fireworks          | `FIREWORKS_API_KEY`         | `https://api.fireworks.ai/inference/v1` | GLM 5.2, Kimi K2.7 Code                                               |
+| openai             | `OPENAI_API_KEY`            | (por defecto)                           | GPT 5.4 mini, GPT 5.5                                                 |
+| openai-compatible  | `OPENAI_COMPATIBLE_API_KEY` | `OPENAI_COMPATIBLE_BASE_URL` (obligatoria) | solo ID de modelo personalizado                                       |
+| anthropic          | `ANTHROPIC_API_KEY`         | (por defecto, o `ANTHROPIC_BASE_URL`)   | Haiku, Sonnet, Opus                                                   |
 
-The default provider is `openrouter`. `resolveConfiguredProvider()` picks the provider from `OPENWIKI_PROVIDER`, falling back to openrouter if `OPENROUTER_API_KEY` is set, then to `DEFAULT_PROVIDER`.
+El proveedor por defecto es `openrouter`. `resolveConfiguredProvider()` elige el proveedor a partir de `OPENWIKI_PROVIDER`, recurriendo a openrouter si `OPENROUTER_API_KEY` está establecido, y luego a `DEFAULT_PROVIDER`.
 
-### Alternative base URLs
+### URLs base alternativas
 
-Set `ANTHROPIC_BASE_URL` to route the anthropic provider at an alternative,
-Anthropic-compatible endpoint (for example a self-hosted or proxied gateway)
-instead of the default API. When set, it is passed to `ChatAnthropic` as
-`anthropicApiUrl`; the `ANTHROPIC_API_KEY` is still sent as the request
-credential.
+Establezca `ANTHROPIC_BASE_URL` para enrutar el proveedor anthropic hacia un endpoint alternativo compatible con Anthropic (por ejemplo, un gateway auto-alojado o proxied) en lugar de la API por defecto. Cuando está establecido, se pasa a `ChatAnthropic` como `anthropicApiUrl`; la `ANTHROPIC_API_KEY` sigue enviándose como credencial de la petición.
 
-### OpenAI-compatible provider
+### Proveedor OpenAI-compatible
 
-The `openai-compatible` provider targets any OpenAI-compatible chat-completions
-endpoint. It has no default endpoint, so `OPENAI_COMPATIBLE_BASE_URL` is
-**required** (the interactive setup prompts for it, and a run aborts early if it
-is missing). This is useful for OpenAI-compatible LLM endpoints such as those
-exposed by a LiteLLM gateway, which lets you reach whatever upstream providers
-the gateway fronts through a single OpenAI-shaped API.
-Because the provider has no preset model
-list, set `OPENWIKI_MODEL_ID` (or pick "custom model ID" in setup) to whatever
-name the gateway exposes.
+El proveedor `openai-compatible` apunta a cualquier endpoint de chat-completions compatible con OpenAI. No tiene un endpoint por defecto, por lo que `OPENAI_COMPATIBLE_BASE_URL` es **obligatoria** (la configuración interactiva la solicita, y una ejecución se aborta temprano si falta). Esto es útil para endpoints LLM compatibles con OpenAI como los expuestos por un gateway LiteLLM, que permite alcanzar cualquier proveedor subyacente a través de una única API con forma OpenAI.
+Como el proveedor no tiene una lista de modelos preestablecida, establezca `OPENWIKI_MODEL_ID` (o elija "ID de modelo personalizado" en la configuración) al nombre que el gateway exponga.
 
 ```bash
 OPENWIKI_PROVIDER=openai-compatible
-OPENAI_COMPATIBLE_API_KEY=<gateway key>
+OPENAI_COMPATIBLE_API_KEY=<clave del gateway>
 OPENAI_COMPATIBLE_BASE_URL=https://<gateway>/v1
-OPENWIKI_MODEL_ID=<model name the gateway exposes>
+OPENWIKI_MODEL_ID=<nombre del modelo que expone el gateway>
 ```
 
-Base URLs are resolved by `resolveProviderBaseUrl()` in `src/constants.ts`, which
-prefers a provider's `baseUrlEnvKey` override over the built-in default.
-
-## Help text and validation
-
-The help content is centralized in `src/commands.ts` and is used by the CLI UI. Model validation is intentionally strict:
-
-- model IDs are trimmed,
-- they must match the allowed character pattern (`/^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/u`),
-- URLs are rejected.
-
-## What to change when editing the CLI
-
-- Update parser behavior in `src/commands.ts` first.
-- Then update any user-visible text in `src/cli.tsx` and `README.md`.
-- If new options affect run behavior, make sure `src/agent/index.ts` and `src/credentials.tsx` still receive the right inputs.
-- If adding a provider, update `PROVIDER_CONFIGS` and `SELECTABLE_OPENWIKI_PROVIDERS` in `src/constants.ts`, `managedEnvKeys` in `src/env.ts`, and the `createModel` branch in `src/agent/index.ts`.
-- To let a provider accept an alternative base URL, set `baseUrlEnvKey` on its `PROVIDER_CONFIGS` entry, add that key to `managedEnvKeys` in `src/env.ts`, and read it through `resolveProviderBaseUrl()` in the provider's `createModel` branch.
-- To require a user-supplied base URL (a provider with no default endpoint, like `openai-compatible`), also set `requiresBaseUrl: true`. `ensureProviderBaseUrl()` in `src/agent/index.ts` enforces it at runtime, and the interactive setup adds a base-URL step for such providers.
-- Re-check the `package.json` bin entry and scripts if the entrypoint changes.
-
-## Source map
-
-- `src/cli.tsx`
-- `src/commands.ts`
-- `src/credentials.tsx`
-- `src/constants.ts`
-- `src/env.ts`
-- `README.md`
-- `package.json`
-- Git evidence: commits `ceded10`, `f89b05d`, `fd3a702`, `8278c36`, `0fa1430`
+Las URLs base se resuelven mediante `resolveProviderBaseUrl()` en `src/constants.ts`, que prefiere la variable de entorno `baseUrlEnvKey` del proveedor sobre el valor por defecto integrado.

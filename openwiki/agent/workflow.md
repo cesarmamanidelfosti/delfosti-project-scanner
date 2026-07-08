@@ -1,110 +1,99 @@
-# Agent workflow
+# Flujo de trabajo del agente
 
-The documentation agent is implemented in `src/agent/`. It takes a command (`chat`, `init`, or `update`), gathers repository context, builds prompts, runs a DeepAgents session, and records successful update metadata — but only if the documentation content actually changed.
+El agente de documentación está implementado en `src/agent/`. Toma un comando (`chat`, `init`, `update` o `review`), reúne el contexto del repositorio, construye los prompts, ejecuta una sesión de DeepAgents y registra los metadatos de actualización exitosa — pero solo si el contenido de la documentación cambió realmente.
 
-## Main flow
+## Flujo principal
 
-`src/agent/index.ts` follows this sequence for non-chat runs:
+`src/agent/index.ts` sigue esta secuencia para las ejecuciones que no son de chat:
 
-1. Load `~/.openwiki/.env` into `process.env`.
-2. Resolve the provider via `resolveConfiguredProvider()` and ensure the provider's API key exists.
-3. Resolve the model ID from CLI input, `OPENWIKI_MODEL_ID`, or the provider's default model.
-4. Create a run context from Git state and prior update metadata.
-5. Snapshot the current `openwiki/` content hash (before the run).
-6. Build the system prompt and user prompt.
-7. Create the provider-specific model client (`ChatAnthropic`, `ChatOpenRouter`, or `ChatOpenAI`).
-8. Create a DeepAgents `LocalShellBackend` rooted at the repository with a SQLite checkpointer.
-9. Stream messages and tool events back to the CLI.
-10. For `init` and `update`, compare the post-run content snapshot to the pre-run snapshot. Write `openwiki/.last-update.json` **only if the content changed**.
+1. Cargar `~/.openwiki/.env` en `process.env`.
+2. Resolver el proveedor mediante `resolveConfiguredProvider()` y asegurar que la clave de API del proveedor exista.
+3. Resolver el ID de modelo desde la entrada de la CLI, `OPENWIKI_MODEL_ID` o el modelo por defecto del proveedor.
+4. Crear un contexto de ejecución a partir del estado de Git y los metadatos de actualización previos.
+5. Tomar una instantánea del hash de contenido actual de `openwiki/` (antes de la ejecución).
+6. Construir el prompt de sistema y el prompt de usuario.
+7. Crear el cliente de modelo específico del proveedor (`ChatAnthropic`, `ChatOpenRouter` o `ChatOpenAI`).
+8. Crear un `LocalShellBackend` de DeepAgents enraizado en el repositorio con un punto de control SQLite.
+9. Transmitir mensajes y eventos de herramientas de vuelta a la CLI.
+10. Para `init` y `update`, comparar la instantánea de contenido posterior con la anterior. Escribir `openwiki/.last-update.json` **solo si el contenido cambió**.
 
-Chat runs skip metadata writes entirely.
+Las ejecuciones de chat omiten la escritura de metadatos por completo.
 
-## Provider-specific model creation
+## Creación de modelo específica por proveedor
 
-`createModel()` in `src/agent/index.ts` branches by provider:
+`createModel()` en `src/agent/index.ts` se ramifica según el proveedor:
 
-- **anthropic**: `new ChatAnthropic(modelId, { apiKey, anthropicApiUrl? })` — uses `@langchain/anthropic` directly. When `ANTHROPIC_BASE_URL` is set, the resolved alternative base URL is passed as `anthropicApiUrl` so requests can be routed to a self-hosted or proxied Anthropic-compatible endpoint instead of the default API.
-- **openrouter**: `new ChatOpenRouter({ apiKey, baseURL, model, siteName: "OpenWiki" })` — uses the selected OpenRouter model directly.
-- **openai**: `new ChatOpenAI({ apiKey, model, useResponsesApi: true })` — uses OpenAI's Responses API for official OpenAI calls.
-- **baseten / fireworks / openai-compatible**: `new ChatOpenAI({ apiKey, configuration: { baseURL? }, model })` — OpenAI-compatible clients using the provider's base URL when configured. The `openai-compatible` provider has no default endpoint; its base URL is user-supplied via `OPENAI_COMPATIBLE_BASE_URL` and required (`requiresBaseUrl: true`), which lets OpenWiki target any OpenAI-compatible gateway (for example a LiteLLM gateway fronting upstream providers).
+- **anthropic**: `new ChatAnthropic(modelId, { apiKey, anthropicApiUrl? })` — usa `@langchain/anthropic` directamente. Cuando `ANTHROPIC_BASE_URL` está establecido, la URL base alternativa resuelta se pasa como `anthropicApiUrl` para que las peticiones puedan enrutarse a un endpoint compatible con Anthropic auto-alojado o proxied en lugar de la API por defecto.
+- **openrouter**: `new ChatOpenRouter({ apiKey, baseURL, model, siteName: "OpenWiki" })` — usa el modelo de OpenRouter seleccionado directamente.
+- **openai**: `new ChatOpenAI({ apiKey, model, useResponsesApi: true })` — usa la API de Responses de OpenAI para llamadas oficiales a OpenAI.
+- **baseten / fireworks / openai-compatible**: `new ChatOpenAI({ apiKey, configuration: { baseURL? }, model })` — clientes compatibles con OpenAI que usan la URL base del proveedor cuando está configurada. El proveedor `openai-compatible` no tiene endpoint por defecto; su URL base la suministra el usuario mediante `OPENAI_COMPATIBLE_BASE_URL` y es obligatoria (`requiresBaseUrl: true`), lo que permite a OpenWiki apuntar a cualquier gateway compatible con OpenAI (por ejemplo, un gateway LiteLLM que fronta proveedores subyacentes).
 
-Base URLs are resolved through `resolveProviderBaseUrl()` in `src/constants.ts`, which prefers a provider's alternative base URL environment variable (`baseUrlEnvKey`) over the built-in default before falling back to the SDK's own default endpoint. Providers marked `requiresBaseUrl` are validated at startup by `ensureProviderBaseUrl()`.
+Las URLs base se resuelven a través de `resolveProviderBaseUrl()` en `src/constants.ts`, que prefiere la variable de entorno de URL base alternativa del proveedor (`baseUrlEnvKey`) sobre el valor por defecto integrado antes de recurrir al endpoint por defecto del propio SDK. Los proveedores marcados con `requiresBaseUrl` son validados al arrancar por `ensureProviderBaseUrl()`.
 
-## Prompting strategy
+## Estrategia de prompting
 
-`src/agent/prompt.ts` encodes the product rules directly into the system prompt. The agent is instructed to:
+`src/agent/prompt.ts` codifica las reglas del producto directamente en el prompt de sistema. Se instruye al agente para que:
 
-- inspect the current codebase and write documentation under `openwiki/`,
-- use filesystem discovery tools and git history rather than inventing facts,
-- keep the initial wiki focused and navigable,
-- avoid thin/slim pages — merge stubs into broader pages rather than creating many small directories,
-- document the repository for both humans and future agents,
-- respect the repository root as the only project in scope,
-- avoid reading secrets or `.env` files,
-- use git history for init and update runs,
-- respect the temporary plan file and update metadata requirements,
-- ensure top-level `/AGENTS.md` and/or `/CLAUDE.md` reference the OpenWiki quickstart (inserting or refreshing a standardized section).
+- inspeccione el código base actual y escriba documentación bajo `openwiki/`,
+- use herramientas de descubrimiento de sistema de archivos e historial de Git en lugar de inventar hechos,
+- mantenga el wiki inicial enfocado y navegable,
+- evite páginas delgadas o escasas — fusionar esbozos en páginas más amplias en lugar de crear muchos directorios pequeños,
+- documente el repositorio tanto para humanos como para agentes futuros,
+- respete la raíz del repositorio como el único proyecto en alcance,
+- evite leer secretos o archivos `.env`,
+- use el historial de Git para las ejecuciones de init y update,
+- respete el archivo de plan temporal y los requisitos de metadatos de actualización,
+- asegure que los archivos `/AGENTS.md` y/o `/CLAUDE.md` de nivel superior referencien la guía rápida de OpenWiki (insertando o refrescando una sección estandarizada).
 
-The user prompt changes with the command:
+El prompt de usuario cambia según el comando:
 
-- `init` includes the current Git summary and asks for fresh documentation.
-- `update` includes last update metadata and a Git change summary.
-- `chat` just forwards the user message.
+- `init` incluye el resumen actual de Git y pide documentación nueva.
+- `update` incluye los metadatos de la última actualización y un resumen de cambios de Git.
+- `chat` simplemente reenvía el mensaje del usuario.
+- `review` pide un resumen contextual de solo lectura sin escribir archivos.
 
-## Git evidence and update metadata
+## Evidencia de Git y metadatos de actualización
 
-`src/agent/utils.ts` is responsible for the repository evidence that the prompt sees:
+`src/agent/utils.ts` es responsable de la evidencia del repositorio que el prompt ve:
 
-- current working tree status,
-- current HEAD,
-- a change window since the last successful update when `.last-update.json` includes a `gitHead` or `updatedAt`,
-- the most recent 20 commits with changed files for init runs (or updates without prior metadata),
-- a diff summary against HEAD.
+- el estado actual del árbol de trabajo,
+- el HEAD actual,
+- una ventana de cambios desde la última actualización exitosa cuando `.last-update.json` incluye un `gitHead` o `updatedAt`,
+- los 20 commits más recientes con archivos modificados para ejecuciones de init (o actualizaciones sin metadatos previos),
+- un resumen de diff contra HEAD.
 
-On successful init/update runs where content changed, the agent writes JSON metadata with:
+En ejecuciones exitosas de init/update donde el contenido cambió, el agente escribe metadatos JSON con:
 
 - `updatedAt`
 - `command`
 - `gitHead`
 - `model`
 
-That metadata is later used to scope update runs.
+Esos metadatos se usan posteriormente para acotar las ejecuciones de update.
 
-### Content snapshot
+### Instantánea de contenido
 
-`createOpenWikiContentSnapshot()` computes a SHA-256 hash of the entire `openwiki/` directory tree (excluding `.last-update.json`). The agent runtime takes a snapshot before and after the run. If they match — meaning the model made no documentation changes — the metadata file is not updated. This prevents scheduled update loops from churning the metadata when the wiki is already current.
+`createOpenWikiContentSnapshot()` calcula un hash SHA-256 de todo el árbol del directorio `openwiki/` (excluyendo `.last-update.json`). El tiempo de ejecución del agente toma una instantánea antes y después de la ejecución. Si coinciden — lo que significa que el modelo no hizo cambios en la documentación — el archivo de metadatos no se actualiza. Esto evita que los bucles de actualización programados recambien los metadatos cuando el wiki ya está actualizado.
 
-## Model errors
+## Errores de modelo
 
-The agent runtime uses only the selected provider and model for a run. If that
-request fails, OpenWiki surfaces the provider error and stops instead of
-retrying with another model.
+El tiempo de ejecución del agente usa solo el proveedor y modelo seleccionados para una ejecución. Si esa petición falla, OpenWiki muestra el error del proveedor y se detiene en lugar de reintentar con otro modelo.
 
-## Why this matters
+## Por qué esto importa
 
-The agent is not just a generic chat wrapper. It is intentionally constrained so it can:
+El agente no es solo un envoltorio de chat genérico. Está intencionalmente restringido para que pueda:
 
-- write repository-local docs without wandering outside the repo,
-- preserve continuity across runs via checkpointing and metadata,
-- keep updates grounded in Git evidence,
-- avoid metadata churn via the content-snapshot check,
-- support both interactive and scheduled maintenance use cases.
+- escribir documentación local del repositorio sin salirse del repo,
+- preservar la continuidad entre ejecuciones mediante puntos de control y metadatos,
+- mantener las actualizaciones basadas en evidencia de Git,
+- evitar el recambio de metadatos mediante la verificación de instantánea de contenido,
+- soportar tanto casos de uso interactivos como de mantenimiento programado.
 
-## Things to watch when changing agent behavior
+## Aspectos a vigilar al cambiar el comportamiento del agente
 
-- Keep the prompt in sync with the actual filesystem tools and path conventions used by the CLI.
-- Be careful with `.last-update.json` semantics, because update runs use it to decide what changed since the previous successful run.
-- The content-snapshot check means a no-op update will not update metadata. If you change the snapshot logic, ensure `.last-update.json` is still excluded.
-- Credential loading happens before model resolution; changes there affect both onboarding and agent startup.
-- When adding a provider, add a branch in `createModel()` and ensure the API key env key is checked in `ensureProviderKey()`.
-- The DeepAgents backend is configured with `virtualMode: true`, which is important for documentation-only behavior.
-
-## Source map
-
-- `src/agent/index.ts`
-- `src/agent/prompt.ts`
-- `src/agent/utils.ts`
-- `src/agent/types.ts`
-- `src/constants.ts`
-- `src/env.ts`
-- Git evidence: commits `ceded10`, `f89b05d`, `dfa73cc`, `a82759f`, `0fa1430`
+- Mantenga el prompt sincronizado con las herramientas de sistema de archivos y las convenciones de ruta reales usadas por la CLI.
+- Tenga cuidado con la semántica de `.last-update.json`, porque las ejecuciones de update lo usan para decidir qué cambió desde la ejecución exitosa anterior.
+- La verificación de instantánea de contenido significa que una actualización nula no actualizará los metadatos. Si cambia la lógica de instantánea, asegúrese de que `.last-update.json` siga excluido.
+- La carga de credenciales ocurre antes de la resolución del modelo; los cambios ahí afectan tanto la configuración inicial como el arranque del agente.
+- Al agregar un proveedor, añada una rama en `createModel()` y asegúrese de que la clave de entorno de la API se verifique en `ensureProviderKey()`.
+- El backend de DeepAgents está configurado con `virtualMode: true`, lo cual es importante para el comportamiento exclusivamente documental.

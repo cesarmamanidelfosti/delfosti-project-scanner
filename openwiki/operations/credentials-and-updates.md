@@ -1,120 +1,99 @@
-# Credentials and updates
+# Credenciales y actualizaciones
 
-OpenWiki has two operational concerns that matter for both users and maintainers:
+OpenWiki tiene dos preocupaciones operativas que importan tanto para usuarios como para mantenedores:
 
-1. local credential storage in `~/.openwiki/.env`, and
-2. persisted update metadata in `openwiki/.last-update.json`.
+1. el almacenamiento local de credenciales en `~/.openwiki/.env`, y
+2. los metadatos de actualización persistidos en `openwiki/.last-update.json`.
 
-It also ships with GitHub Actions and GitLab CI workflow examples for scheduled updates.
+También incluye ejemplos de flujos de trabajo para GitHub Actions y GitLab CI para actualizaciones programadas.
 
-## Local credential storage
+## Almacenamiento local de credenciales
 
-`src/env.ts` manages a private environment file under the user's home directory:
+`src/env.ts` gestiona un archivo de entorno privado bajo el directorio home del usuario:
 
-- directory: `~/.openwiki` (mode `0o700`)
-- file: `~/.openwiki/.env` (mode `0o600`)
+- directorio: `~/.openwiki` (modo `0o700`)
+- archivo: `~/.openwiki/.env` (modo `0o600`)
 
-The file stores provider configuration and API keys:
+El archivo almacena la configuración del proveedor y las claves de API:
 
-- `OPENWIKI_PROVIDER` — the selected model provider
-- `OPENWIKI_MODEL_ID` — the default model ID
-- Provider API keys: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`, `ANTHROPIC_API_KEY`, `BASETEN_API_KEY`, `FIREWORKS_API_KEY`
-- Base URLs: `ANTHROPIC_BASE_URL` (optional — routes the anthropic provider at an Anthropic-compatible endpoint other than the default API) and `OPENAI_COMPATIBLE_BASE_URL` (required by the openai-compatible provider, which has no default endpoint)
-- Optional LangSmith settings: `LANGSMITH_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2`
+- `OPENWIKI_PROVIDER` — el proveedor de modelo seleccionado
+- `OPENWIKI_MODEL_ID` — el ID de modelo por defecto
+- Claves de API de proveedores: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`, `ANTHROPIC_API_KEY`, `BASETEN_API_KEY`, `FIREWORKS_API_KEY`
+- URLs base: `ANTHROPIC_BASE_URL` (opcional — enruta el proveedor anthropic a un endpoint compatible con Anthropic distinto de la API por defecto) y `OPENAI_COMPATIBLE_BASE_URL` (obligatoria para el proveedor openai-compatible, que no tiene endpoint por defecto)
+- Configuración opcional de LangSmith: `LANGSMITH_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2`
 
-The loader merges those values into `process.env`, while preferring existing process-level values over file values. Deprecated keys (`OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT`) are skipped on load and removed on save.
+El cargador fusiona esos valores en `process.env`, dando prioridad a los valores existentes a nivel de proceso sobre los del archivo. Las claves obsoletas (`OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT`) se omiten al cargar y se eliminan al guardar.
 
-`src/credentials.tsx` provides the interactive bootstrap flow when required:
+`src/credentials.tsx` proporciona el flujo interactivo de configuración inicial cuando es necesario:
 
-- prompts for a provider (arrow-key selection menu),
-- prompts for the provider's API key,
-- prompts for a model choice (arrow-key selection from the provider's model list, or a custom model ID),
-- optionally prompts for a LangSmith key,
-- writes the results with restrictive file permissions,
-- removes deprecated OpenAI-related environment variables when saving.
+- solicita un proveedor (menú de selección con teclas de flecha),
+- solicita la clave de API del proveedor,
+- solicita una elección de modelo (menú de selección de la lista de modelos del proveedor, o un ID de modelo personalizado),
+- opcionalmente solicita una clave de LangSmith,
+- escribe los resultados con permisos de archivo restrictivos,
+- elimina las variables de entorno obsoletas relacionadas con OpenAI al guardar.
 
-The setup flow runs for **all** interactive commands (chat, init, and update) when credentials are missing — not just chat. In non-interactive mode (no TTY or `--print`), missing provider keys produce an error instead of a prompt.
+El flujo de configuración se ejecuta para **todos** los comandos interactivos (chat, init y update) cuando faltan credenciales — no solo para chat. En modo no interactivo (sin TTY o con `--print`), las claves de proveedor faltantes producen un error en lugar de una solicitud.
 
-## Provider resolution
+## Resolución del proveedor
 
-`resolveConfiguredProvider()` in `src/constants.ts` determines the active provider:
+`resolveConfiguredProvider()` en `src/constants.ts` determina el proveedor activo:
 
-1. If `OPENWIKI_PROVIDER` is set and valid, use it.
-2. Otherwise, if `OPENROUTER_API_KEY` is present, default to `openrouter`.
-3. Otherwise, fall back to `DEFAULT_PROVIDER` (`openrouter`).
+1. Si `OPENWIKI_PROVIDER` está establecido y es válido, se usa.
+2. De lo contrario, si `OPENROUTER_API_KEY` está presente, se usa por defecto `openrouter`.
+3. De lo contrario, se recurre a `DEFAULT_PROVIDER` (`openrouter`).
 
-`needsCredentialSetup()` in `src/credentials.tsx` checks whether the provider env var is valid and whether the provider's API key, a model ID (unless overridden), and a LangSmith key are all present. Any missing or invalid provider value triggers the interactive flow.
+`needsCredentialSetup()` en `src/credentials.tsx` verifica si la variable de entorno del proveedor es válida y si la clave de API del proveedor, un ID de modelo (salvo que se haya establecido explícitamente) y una clave de LangSmith están presentes. Cualquier valor de proveedor faltante o inválido desencadena el flujo interactivo.
 
-## Model and credential diagnostics
+## Diagnósticos de modelo y credenciales
 
-The env layer also produces diagnostics for the CLI UI. Those diagnostics report:
+La capa de entorno también produce diagnósticos para la interfaz de la CLI. Esos diagnósticos reportan:
 
-- where each credential came from (`process.env`, `~/.openwiki/.env`, both, or `unset`),
-- whether the value is unset,
-- the apparent length,
-- a masked preview,
-- warnings for suspicious formatting such as whitespace, newlines, quotes, or bracketed suffixes,
-- invalid model IDs,
-- invalid provider values.
+- de dónde proviene cada credencial (`process.env`, `~/.openwiki/.env`, ambos, o `unset`),
+- si el valor no está establecido,
+- la longitud aparente,
+- una vista previa enmascarada,
+- advertencias por formato sospechoso como espacios, nuevas líneas, comillas o sufijos entre corchetes,
+- IDs de modelo inválidos,
+- valores de proveedor inválidos.
 
-Diagnostics cover all six provider keys plus `OPENWIKI_PROVIDER`, `OPENWIKI_MODEL_ID`, the base URLs (`ANTHROPIC_BASE_URL`, `OPENAI_COMPATIBLE_BASE_URL`), and `LANGSMITH_API_KEY`. This makes startup problems easier to diagnose without exposing secret values (non-secret values such as the provider, model ID, and base URLs are shown in full).
+Los diagnósticos cubren las seis claves de proveedor más `OPENWIKI_PROVIDER`, `OPENWIKI_MODEL_ID`, las URLs base (`ANTHROPIC_BASE_URL`, `OPENAI_COMPATIBLE_BASE_URL`) y `LANGSMITH_API_KEY`. Esto facilita el diagnóstico de problemas de arranque sin exponer valores secretos (los valores no secretos como el proveedor, el ID de modelo y las URLs base se muestran completos).
 
-## Update metadata
+## Metadatos de actualización
 
-After successful `init` or `update` runs where the `openwiki/` content changed, `src/agent/utils.ts` writes `openwiki/.last-update.json` with:
+Tras ejecuciones exitosas de `init` o `update` donde el contenido de `openwiki/` cambió, `src/agent/utils.ts` escribe `openwiki/.last-update.json` con:
 
 - `updatedAt`
 - `command`
 - `gitHead`
 - `model`
 
-The content-change check uses `createOpenWikiContentSnapshot()`, which hashes the `openwiki/` directory (excluding `.last-update.json`). If the hash is identical before and after the run, metadata is not written. This prevents scheduled update loops from updating the timestamp when no documentation changed.
+La verificación de cambio de contenido usa `createOpenWikiContentSnapshot()`, que aplica un hash al directorio `openwiki/` (excluyendo `.last-update.json`). Si el hash es idéntico antes y después de la ejecución, los metadatos no se escriben. Esto evita que los bucles de actualización programados actualicen la marca de tiempo cuando no hubo cambios en la documentación.
 
-Update runs use this metadata to build a change summary since the previous successful OpenWiki execution — preferring `gitHead` for a precise commit range, falling back to `updatedAt` for a time-based range.
+Las ejecuciones de update usan estos metadatos para construir un resumen de cambios desde la ejecución exitosa anterior de OpenWiki — prefiriendo `gitHead` para un rango de commits preciso, recurriendo a `updatedAt` para un rango basado en tiempo.
 
-## Scheduled CI workflows
+## Flujos de trabajo de CI programados
 
-The repository includes `examples/openwiki-update.yml` as a copyable GitHub Actions scheduled update workflow. It:
+El repositorio incluye `examples/openwiki-update.yml` como un flujo de trabajo de GitHub Actions para actualizaciones programadas. Este:
 
-- runs on schedule (daily at 08:00 UTC) and on manual dispatch,
-- checks out the repository,
-- installs Node.js 22,
-- installs OpenWiki globally,
-- runs `openwiki --update --print`,
-- passes `OPENROUTER_API_KEY`, `OPENWIKI_MODEL_ID`, and `LANGSMITH_API_KEY` from GitHub secrets,
-- opens a pull request with `peter-evans/create-pull-request` scoped to the `openwiki` directory.
+- se ejecuta en un horario (diariamente a las 08:00 UTC) y mediante dispatch manual,
+- hace checkout del repositorio,
+- instala Node.js 22,
+- instala OpenWiki globalmente,
+- ejecuta `openwiki --update --print`,
+- pasa `OPENROUTER_API_KEY`, `OPENWIKI_MODEL_ID` y `LANGSMITH_API_KEY` desde los secretos de GitHub,
+- abre un pull request con `peter-evans/create-pull-request` limitado al directorio `openwiki`.
 
-The workflow is a good reference for automated maintenance. The repo also contains a `checks.yml` workflow for CI (lint/format checks).
+El flujo de trabajo es una buena referencia para mantenimiento automatizado. El repositorio también contiene un flujo de trabajo `checks.yml` para CI (verificaciones de lint/formato).
 
-The repository also includes `examples/openwiki-update.gitlab-ci.yml` as a copyable GitLab CI scheduled update job. It:
+El repositorio también incluye `examples/openwiki-update.gitlab-ci.yml` como un job de GitLab CI para actualizaciones programadas. Este:
 
-- runs from a scheduled pipeline or a manually triggered web pipeline,
-- installs OpenWiki globally in a Node.js 22 container,
-- runs `openwiki --update --print`,
-- skips the rest of the job when `openwiki/` did not change,
-- commits changes to a generated `openwiki/update-$CI_PIPELINE_ID` branch,
-- pushes that branch back to the GitLab project, and
-- creates a merge request targeting the project's default branch through the GitLab API.
+- se ejecuta desde un pipeline programado o un pipeline web activado manualmente,
+- instala OpenWiki globalmente en un contenedor de Node.js 22,
+- ejecuta `openwiki --update --print`,
+- omite el resto del job cuando `openwiki/` no cambió,
+- confirma los cambios en una rama generada `openwiki/update-$CI_PIPELINE_ID`,
+- empuja esa rama de vuelta al proyecto de GitLab, y
+- crea un merge request apuntando a la rama por defecto del proyecto a través de la API de GitLab.
 
-GitLab users should configure protected CI/CD variables for the model provider key, for example `OPENROUTER_API_KEY`, and `OPENWIKI_GITLAB_TOKEN`. The GitLab token needs permission to push a branch and create merge requests in the target project.
-
-## Things to watch when changing operations
-
-- The `.env` file lives outside the repository, so changes to its format should be conservative.
-- Never document real secret values; only document the presence and purpose of the configuration.
-- If update metadata semantics change, update both the agent runtime and the docs that explain how update runs are scoped.
-- Scheduled automation depends on the same CLI entrypoint as local users, so workflow changes should be validated against `package.json` and the CLI help text.
-- When adding a provider, update `managedEnvKeys` in `src/env.ts` so the env file is formatted correctly and diagnostics cover the new key.
-- The content-snapshot check means CI runs that produce no changes will not update `.last-update.json` or open a PR with metadata-only changes.
-
-## Source map
-
-- `src/env.ts`
-- `src/credentials.tsx`
-- `src/constants.ts`
-- `src/agent/utils.ts`
-- `src/agent/index.ts`
-- `examples/openwiki-update.yml`
-- `examples/openwiki-update.gitlab-ci.yml`
-- `README.md`
-- Git evidence: commits `ceded10`, `f89b05d`, `8278c36`, `0fa1430`
+Los usuarios de GitLab deben configurar variables CI/CD protegidas para la clave del proveedor de modelo, por ejemplo `OPENROUTER_API_KEY`, y `OPENWIKI_GITLAB_TOKEN`. El token de GitLab necesita permiso para empujar una rama y crear merge requests en el proyecto objetivo.
