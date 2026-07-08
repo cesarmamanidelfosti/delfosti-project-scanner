@@ -71,14 +71,15 @@ export function parseCommand(argv: string[]): CliCommand {
       continue;
     }
 
-    if (arg === "--init" || arg === "--update") {
-      const nextCommand = arg === "--init" ? "init" : "update";
+    if (arg === "--init" || arg === "--update" || arg === "--review") {
+      const nextCommand: OpenWikiCommand =
+        arg === "--init" ? "init" : arg === "--update" ? "update" : "review";
 
       if (command !== "chat" && command !== nextCommand) {
         return {
           kind: "error",
           exitCode: 1,
-          message: "--init and --update cannot be used together.",
+          message: "--init, --update, and --review cannot be used together.",
         };
       }
 
@@ -178,6 +179,7 @@ export const helpContent: HelpContent = {
     "openwiki [--modelId <model>] [message]",
     "openwiki --init [message]",
     "openwiki --update [message]",
+    "openwiki --review [message]",
   ],
   commands: [
     {
@@ -193,6 +195,11 @@ export const helpContent: HelpContent = {
     {
       label: "--update",
       description: "Update existing OpenWiki documentation.",
+    },
+    {
+      label: "--review",
+      description:
+        "Print a read-only contextual review briefing. Writes no files.",
     },
     {
       label: "-p, --print",
@@ -213,8 +220,10 @@ export const helpContent: HelpContent = {
     "openwiki",
     "openwiki --init",
     "openwiki --update",
+    "openwiki --review",
     'openwiki "What can you do?"',
     'openwiki -p "Summarize what OpenWiki can do"',
+    'openwiki --review -p "Focus on the payment module"',
     "openwiki --modelId gpt-5.5",
     'openwiki --update --modelId gpt-5.5 "Please document the API routes first"',
   ],

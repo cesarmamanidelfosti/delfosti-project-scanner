@@ -114,8 +114,9 @@ async function runOpenWikiAgentCore(
 ): Promise<OpenWikiRunResult> {
   const context = await createRunContext(command, cwd);
   emitDebug(options, "context=created");
-  const openWikiSnapshotBefore =
-    command === "chat" ? null : await createOpenWikiContentSnapshot(cwd);
+  const openWikiSnapshotBefore = isReadOnlyCommand(command)
+    ? null
+    : await createOpenWikiContentSnapshot(cwd);
   emitDebug(options, "openwiki.snapshot=created");
   const model = createModel(provider, modelId);
   emitDebug(options, `model.provider=${provider}`);
@@ -179,7 +180,7 @@ async function runOpenWikiAgentCore(
   await chmodIfExists(checkpointPath, 0o600);
 
   if (
-    command !== "chat" &&
+    !isReadOnlyCommand(command) &&
     openWikiSnapshotBefore !== (await createOpenWikiContentSnapshot(cwd))
   ) {
     await writeLastUpdateMetadata(command, cwd, modelId);
@@ -187,8 +188,8 @@ async function runOpenWikiAgentCore(
   } else {
     emitDebug(
       options,
-      command === "chat"
-        ? "metadata=skipped command=chat"
+      isReadOnlyCommand(command)
+        ? `metadata=skipped command=${command}`
         : "metadata=skipped openwiki=unchanged",
     );
   }
@@ -197,6 +198,10 @@ async function runOpenWikiAgentCore(
     command,
     model: modelId,
   };
+}
+
+function isReadOnlyCommand(command: OpenWikiCommand): boolean {
+  return command === "chat" || command === "review";
 }
 
 const checkpointPath = path.join(openWikiEnvDir, "openwiki.sqlite");

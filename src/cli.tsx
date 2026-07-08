@@ -166,7 +166,7 @@ function App({ command }: AppProps) {
   }
 
   function submitCommandRun(
-    nextCommand: Extract<OpenWikiCommand, "init" | "update">,
+    nextCommand: Extract<OpenWikiCommand, "init" | "update" | "review">,
     message: string | null,
   ) {
     setActiveUserMessage(message);
@@ -1211,7 +1211,7 @@ type ChatInputProps = {
   currentProvider: OpenWikiProvider;
   onClear: () => void;
   onCommandRun: (
-    command: Extract<OpenWikiCommand, "init" | "update">,
+    command: Extract<OpenWikiCommand, "init" | "update" | "review">,
     message: string | null,
   ) => void;
   onModelSelect: (modelId: string) => Promise<void>;
@@ -1416,7 +1416,7 @@ function ChatInput({
       return;
     }
 
-    if (option.id === "init" || option.id === "update") {
+    if (option.id === "init" || option.id === "update" || option.id === "review") {
       resetInput();
       onCommandRun(option.id, args);
       return;
@@ -1432,7 +1432,7 @@ function ChatInput({
     if (option.id === "help") {
       resetInput();
       setNotice(
-        "Slash commands: /provider, /model, /init, /update, /clear, /help, /exit. Use arrows to select.",
+        "Slash commands: /provider, /model, /init, /update, /review, /clear, /help, /exit. Use arrows to select.",
       );
       return;
     }
@@ -1606,6 +1606,7 @@ type SlashCommandId =
   | "init"
   | "model"
   | "provider"
+  | "review"
   | "update";
 
 type SlashCommandOption = {
@@ -1645,6 +1646,11 @@ const slashCommandOptions: SlashCommandOption[] = [
     description: "Update existing OpenWiki documentation",
     id: "update",
     label: "/update",
+  },
+  {
+    description: "Print a read-only contextual review briefing",
+    id: "review",
+    label: "/review",
   },
   {
     description: "Start a fresh thread and clear chat history",
@@ -2999,7 +3005,9 @@ function shouldAutoExitStartupRun(command: CliCommand): boolean {
     !command.dryRun &&
     !command.print &&
     command.shouldStart &&
-    (command.command === "init" || command.command === "update")
+    (command.command === "init" ||
+      command.command === "update" ||
+      command.command === "review")
   );
 }
 

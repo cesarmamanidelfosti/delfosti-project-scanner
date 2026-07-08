@@ -74,8 +74,26 @@ describe("parseCommand — init/update", () => {
     });
   });
 
+  test("--review selects the review command and starts", () => {
+    expect(parseCommand(["--review"])).toMatchObject({
+      kind: "run",
+      command: "review",
+      shouldStart: true,
+    });
+  });
+
   test("--init and --update together is an error", () => {
     const result = parseCommand(["--init", "--update"]);
+
+    expect(result.kind).toBe("error");
+    if (result.kind === "error") {
+      expect(result.exitCode).toBe(1);
+      expect(result.message).toMatch(/cannot be used together/u);
+    }
+  });
+
+  test("--review and --init together is an error", () => {
+    const result = parseCommand(["--review", "--init"]);
 
     expect(result.kind).toBe("error");
     if (result.kind === "error") {

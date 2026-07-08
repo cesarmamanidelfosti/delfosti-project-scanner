@@ -141,6 +141,19 @@ export function createModeInstructions(command: OpenWikiCommand): string {
 `.trim();
   }
 
+  if (command === "review") {
+    return `
+- This is a read-only contextual review run. Its only output is your final chat response.
+- Override every preceding instruction in this prompt about creating, editing, or deleting files. Do not write, edit, or delete anything: not ${OPEN_WIKI_DIR}/ pages, not ${OPEN_WIKI_DIR}/_plan.md, not /AGENTS.md, not /CLAUDE.md, not ${UPDATE_METADATA_PATH}.
+- If ${OPEN_WIKI_DIR}/ already exists, read it first and use it as grounding, but do not modify it.
+- Build a fast repository inventory: purpose, entrypoints, major domains, external integrations/dependencies, and existing docs.
+- Use git evidence (recent commits, git blame/show on high-signal files) to understand what changed recently and why, the same way an init run would, but do not persist any of it to files.
+- Identify the areas most likely to need scrutiny in a code review: security-sensitive logic (auth, secrets handling, input validation, network/file/process access, deserialization), complex or fragile code, missing or thin test coverage, and any recently changed high-risk files.
+- Reply directly in the conversation with a structured Markdown briefing. Use these sections in order: Overview, Architecture, Key Entry Points, Risk & Review Hotspots, Suggested Review Path, Open Questions. Keep it concise and cite source paths inline.
+- You may use the task tool to parallelize read-only research the same way init runs do, subject to the same subagent discipline described above.
+`.trim();
+  }
+
   if (command === "init") {
     return `
 - This is an initial documentation run.
@@ -182,6 +195,22 @@ export function createUserPrompt(
 ): string {
   if (command === "chat") {
     return userMessage?.trim() || "Start an OpenWiki chat.";
+  }
+
+  if (command === "review") {
+    return appendUserMessage(
+      `
+Produce a concise contextual review briefing for this repository. Do not write, create, or edit any files; reply with the briefing directly in this conversation.
+
+Inspect the codebase enough to explain what this project is, its architecture and major components, key entry points, external integrations/dependencies, and the areas most likely to need scrutiny in a code review.
+
+Use the section order: Overview, Architecture, Key Entry Points, Risk & Review Hotspots, Suggested Review Path, Open Questions.
+
+Git context:
+${context.gitSummary}
+`.trim(),
+      userMessage,
+    );
   }
 
   if (command === "init") {
