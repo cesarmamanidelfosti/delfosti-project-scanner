@@ -109,4 +109,3 @@ If there's an inference provider or model you'd like to see added, please open a
 ## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a PR. We intentionally keep PRs tightly scoped to one change each, and PRs that bundle unrelated changes may be closed with a request to split them.
->>>>>>> origin/main
